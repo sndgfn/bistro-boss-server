@@ -1,4 +1,5 @@
 const express = require('express');
+var jwt = require('jsonwebtoken');
 const cors = require('cors');
 const app = express();
 require('dotenv').config()
@@ -7,8 +8,6 @@ const port = process.env.PORT || 5000;
 //middlewears
 app.use(cors());
 app.use(express.json());
-
-
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ch1t3pv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -40,6 +39,31 @@ async function run() {
             const result = await reviewCollection.find().toArray();
             res.send(result);
         })
+        // jwt start
+
+        app.post('/jwt', (req, res) => {
+            const user = req.body;
+
+            if (!user || !user.email) {
+                return res.status(400).send({ error: "User email is required" });
+            }
+
+            // Sign the JWT with expiration
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+
+            res.send({ token });
+        });
+        //jwt end
+        //middlewears
+        const verifyToken = (req, res, next) => {
+            console.log('inside the verify token', req.headers);
+            if (!req.headers.authorization) {
+                return res.status(401).send({ messege: 'forbidden access' })
+            }
+            const token = req.headers.authorization.split(' ')[1];
+            // next();
+        }
+
         //users related api
         app.post('/users', async (req, res) => {
             const user = req.body;
@@ -52,7 +76,8 @@ async function run() {
             const result = await usersCollection.insertOne(user);
             res.send(result);
         })
-        app.get('/users', async (req, res) => {
+        app.get('/users', verifyToken, async (req, res) => {
+            // console.log(req.headers);
             const result = await usersCollection.find().toArray();
             res.send(result);
         })
