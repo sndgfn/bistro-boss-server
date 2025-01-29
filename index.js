@@ -30,6 +30,40 @@ async function run() {
         const reviewCollection = client.db("bistroDb").collection("reviews")
         const cartsCollection = client.db("bistroDb").collection("carts")
 
+        //middlewears
+        const verifyToken = (req, res, next) => {
+            const token = req.headers.authorization?.split(" ")[1];
+            if (!token) {
+                return res.sendStatus(401); // Unauthorized
+            }
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+                if (err) {
+                    return res.sendStatus(403); // Forbidden
+                }
+
+                req.decoded = decoded;
+                next();
+            });
+        };
+        //verify admin after verify user
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email: email };
+            const user = await usersCollection.findOne(query);
+            const isAdmin = user?.role === "admin";
+            if (!isAdmin) {
+                return res.status(403).send({ messege: 'forbidden access' })
+            }
+            next();
+        }
+
+        app.post('/menu', verifyToken, verifyAdmin, async (req, res) => {
+            const item = req.body;
+            const result = await menuCollection.insertOne(item);
+            res.send(result);
+        })
+
+
         app.get('/menu', async (req, res) => {
             const result = await menuCollection.find().toArray();
             res.send(result)
@@ -39,6 +73,7 @@ async function run() {
             const result = await reviewCollection.find().toArray();
             res.send(result);
         })
+
         // jwt start
 
         app.post('/jwt', (req, res) => {
@@ -54,15 +89,8 @@ async function run() {
             res.send({ token });
         });
         //jwt end
-        //middlewears
-        const verifyToken = (req, res, next) => {
-            console.log('inside the verify token', req.headers);
-            if (!req.headers.authorization) {
-                return res.status(401).send({ messege: 'forbidden access' })
-            }
-            const token = req.headers.authorization.split(' ')[1];
-            // next();
-        }
+
+
 
         //users related api
         app.post('/users', async (req, res) => {
@@ -76,10 +104,25 @@ async function run() {
             const result = await usersCollection.insertOne(user);
             res.send(result);
         })
-        app.get('/users', verifyToken, async (req, res) => {
+        app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
             // console.log(req.headers);
             const result = await usersCollection.find().toArray();
             res.send(result);
+        })
+        // amdin verification
+        app.get('/users/admin/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ messege: 'forbidden' })
+            }
+
+            const query = { email: email };
+            const user = await usersCollection.findOne(query);
+            let admin = false;
+            if (user) {
+                admin = user?.role === "admin";
+            }
+            res.send({ admin });
         })
 
         //patch
@@ -95,7 +138,7 @@ async function run() {
             res.send(result);
         })
 
-        app.delete('/users/:id', async (req, res) => {
+        app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const result = await usersCollection.deleteOne(query);
