@@ -205,22 +205,57 @@ async function run() {
         })
 
         //payment related api
+        app.get('/payments/:email', verifyToken, async (req, res) => {
+            const query = { email: req.params.email }
+            const result = await paymentCollection.find(query).toArray();
+            res.send(result)
+        })
+
+
         app.post('/payments', async (req, res) => {
             const payment = req.body;
             const paymentResult = await paymentCollection.insertOne(payment);
             console.log('payment info', payment);
             const query = {
-              _id: {
-                $in: payment.cartIds.map(id => new ObjectId(id))
-              }
+                _id: {
+                    $in: payment.cartIds.map(id => new ObjectId(id))
+                }
             };
-      
+
             const deleteResult = await cartsCollection.deleteMany(query);
-      
+
             res.send({ paymentResult, deleteResult });
-          })
+        })
 
+        //stats or analytics
+        app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+            const users = await usersCollection.estimatedDocumentCount();
+            const menuItems = await menuCollection.estimatedDocumentCount();
+            const orders = await paymentCollection.estimatedDocumentCount();
+            // //this is not hte best way 
+            // const payment = await paymentCollection.find().toArray();
+            // const revenue = payment.reduce((total, payment) => total + payment, 0)
+            const result = await paymentCollection.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalRevenue: {
+                            $sum: '$price'
+                        }
+                    }
+                }
+            ]).toArray();
 
+            const revenue = result.length > 0 ? result[0].totalRevenue : 0;
+
+            res.send({
+                users,
+                menuItems,
+                orders,
+                revenue
+
+            })
+        })
 
 
 
