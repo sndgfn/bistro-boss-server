@@ -232,9 +232,7 @@ async function run() {
             const users = await usersCollection.estimatedDocumentCount();
             const menuItems = await menuCollection.estimatedDocumentCount();
             const orders = await paymentCollection.estimatedDocumentCount();
-            // //this is not hte best way 
-            // const payment = await paymentCollection.find().toArray();
-            // const revenue = payment.reduce((total, payment) => total + payment, 0)
+
             const result = await paymentCollection.aggregate([
                 {
                     $group: {
@@ -256,7 +254,38 @@ async function run() {
 
             })
         })
+        //using aggreate pipeline for chart
+        app.get('/order-stats', async (req, res) => {
+            const result = await paymentCollection.aggregate([
+                {
+                    $unwind: '$menuItemIds'// menuItemsIds er elements gula re vag kore 
+                },
+                {
+                    $lookup: { //onno data collection er sathe connect kore
+                        from: 'menu',
+                        localField: 'menuItemIds',
+                        foreignField: '_id',
+                        as: 'menuItems'
+                    }
+                },
+                {
+                    $unwind: '$menuItems'
+                },
+                {
+                    $group: {
+                        _id: '$menuItems.category',
+                        quantity: { $sum: 1},
+                        revenue:{$sum:'$menuItems.price'}
+                        
+                           
+                    }
 
+                }
+
+
+            ]).toArray();
+            res.send(result)
+        })
 
 
 
